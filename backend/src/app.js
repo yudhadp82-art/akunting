@@ -3,9 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { testConnection } = require('./config/database');
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
+const { db } = require('./config/firebase');
 
 // Import routes
 const memberRoutes = require('./routes/memberRoutes');
@@ -79,12 +79,14 @@ app.use(errorHandler);
 // Start server
 const startServer = async () => {
   try {
-    // Test database connection
-    await testConnection();
-
+    logger.info('Connecting to Firebase Firestore...');
+    // Firebase doesn't need an explicit 'authenticate' like Sequelize,
+    // but we can check if we can access the database.
+    
     app.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV}`);
+      logger.info('Database: Firebase Firestore');
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

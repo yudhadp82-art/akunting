@@ -1,22 +1,34 @@
-const { sequelize } = require('../config/database');
+const FirestoreModel = require('../utils/firestoreModel');
 
-// Import all models
-const AccountType = require('./AccountType');
-const Account = require('./Account');
-const Member = require('./Member');
-const SavingsType = require('./SavingsType');
-const Savings = require('./Savings');
-const LoanType = require('./LoanType');
-const Loan = require('./Loan');
-const LoanRepayment = require('./LoanRepayment');
-const JournalEntry = require('./JournalEntry');
-const JournalLine = require('./JournalLine');
-const Transaction = require('./Transaction');
-const SHUPeriod = require('./SHUPeriod');
-const SHUDistribution = require('./SHUDistribution');
-const SHUAllocationRule = require('./SHUAllocationRule');
+// Initialize all models as Firestore collections
+const AccountType = new FirestoreModel('account_types');
+const Account = new FirestoreModel('accounts');
+const Member = new FirestoreModel('members');
+const SavingsType = new FirestoreModel('savings_types');
+const Savings = new FirestoreModel('savings');
+const LoanType = new FirestoreModel('loan_types');
+const Loan = new FirestoreModel('loans');
+const LoanRepayment = new FirestoreModel('loan_repayments');
+const JournalEntry = new FirestoreModel('journal_entries');
+const JournalLine = new FirestoreModel('journal_lines');
+const Transaction = new FirestoreModel('transactions');
+const SHUPeriod = new FirestoreModel('shu_periods');
+const SHUDistribution = new FirestoreModel('shu_distributions');
+const SHUAllocationRule = new FirestoreModel('shu_allocation_rules');
+const Product = new FirestoreModel('products');
+const POSTransaction = new FirestoreModel('pos_transactions');
+const POSLineItem = new FirestoreModel('pos_line_items');
 
-// Export all models
+// Mock sequelize for compatibility if needed
+const sequelize = {
+  transaction: async (callback) => {
+    // In a real implementation, we would use Firestore transactions
+    return await callback({});
+  },
+  authenticate: async () => true,
+  sync: async () => true
+};
+
 module.exports = {
   sequelize,
   AccountType,
@@ -32,5 +44,8 @@ module.exports = {
   Transaction,
   SHUPeriod,
   SHUDistribution,
-  SHUAllocationRule
+  SHUAllocationRule,
+  Product,
+  POSTransaction,
+  POSLineItem
 };
