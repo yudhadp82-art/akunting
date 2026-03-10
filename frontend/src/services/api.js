@@ -1,8 +1,18 @@
 import axios from 'axios';
 
+// Determine baseURL based on environment
+const getBaseURL = () => {
+  // In production (Vercel), we use relative path /api
+  if (process.env.NODE_ENV === 'production') {
+    return '/api';
+  }
+  // In development, we use the env variable or localhost
+  return process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+};
+
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
