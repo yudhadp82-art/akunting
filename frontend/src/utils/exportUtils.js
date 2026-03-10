@@ -429,10 +429,12 @@ const formatCurrency = (amount) => {
   });
 };
 
-export default {
+const exportUtils = {
   generateBalanceSheetPDF,
   generateIncomeStatementPDF,
   generateSHUPDF,
   generatePOSReceiptPDF,
   exportToCSV
 };
+
+export default exportUtils;
