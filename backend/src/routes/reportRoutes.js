@@ -1,31 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const { Account, AccountType, JournalEntry, JournalLine, Member, Savings, Loan } = require('../models');
-const { Op } = require('sequelize');
-
 // Helper function to get account balance
 const getAccountBalance = async (accountId, asOfDate) => {
   const postedLines = await JournalLine.findAll({
-    where: { account_id: accountId },
-    include: [
-      {
-        model: JournalEntry,
-        as: 'journal_entry',
-        where: {
-          is_posted: true,
-          transaction_date: { [Op.lte]: asOfDate }
-        }
-      }
-    ]
+    where: { 
+      account_id: accountId,
+      transaction_date: { lte: asOfDate }
+    }
   });
 
-  const account = await Account.findByPk(accountId, {
-    include: [{ model: AccountType, as: 'account_type' }]
-  });
+  const account = await Account.findByPk(accountId);
+  const accountType = await AccountType.findByPk(account.account_type_id);
 
   let balance = 0;
   for (const line of postedLines) {
-    if (account.account_type.is_debit_balance) {
+    const entry = await JournalEntry.findByPk(line.journal_entry_id);
+    if (!entry || !entry.is_posted) continue;
+
+    if (accountType.is_debit_balance) {
       balance += parseFloat(line.debit) - parseFloat(line.credit);
     } else {
       balance += parseFloat(line.credit) - parseFloat(line.debit);
@@ -38,12 +30,11 @@ const getAccountBalance = async (accountId, asOfDate) => {
 // Balance Sheet (Laporan Posisi Keuangan) - SAK EP
 router.get('/balance-sheet', async (req, res, next) => {
   try {
-    const asOfDate = req.query.date || new Date();
+    const asOfDate = req.query.date ? new Date(req.query.date) : new Date();
 
     // Get all accounts
     const accounts = await Account.findAll({
-      where: { is_active: true },
-      include: [{ model: AccountType, as: 'account_type' }]
+      where: { is_active: true }
     });
 
     // Group by category
@@ -56,13 +47,15 @@ router.get('/balance-sheet', async (req, res, next) => {
 
       if (Math.abs(balance) < 0.01) continue;
 
+      const accountType = await AccountType.findByPk(account.account_type_id);
+
       const data = {
         account_number: account.account_number,
         name: account.name,
         balance: balance
       };
 
-      switch (account.account_type.category) {
+      switch (accountType.category) {
         case 'ASSET':
           if (account.account_number.startsWith('1-1-')) {
             assets.current.push(data);
@@ -115,7 +108,6 @@ router.get('/income-statement', async (req, res, next) => {
     // Get revenue and expense accounts
     const revenueAccounts = await Account.findAll({
       where: { is_active: true },
-      include: [{ model: AccountType, as: 'account_type' }],
       order: [['account_number', 'ASC']]
     });
 
@@ -130,16 +122,18 @@ router.get('/income-statement', async (req, res, next) => {
 
       if (Math.abs(balance) < 0.01) continue;
 
+      const accountType = await AccountType.findByPk(account.account_type_id);
+
       const data = {
         account_number: account.account_number,
         name: account.name,
         amount: Math.abs(balance)
       };
 
-      if (account.account_type.category === 'REVENUE') {
+      if (accountType.category === 'REVENUE') {
         revenues.push(data);
         totalRevenue += Math.abs(balance);
-      } else if (account.account_type.category === 'EXPENSE') {
+      } else if (accountType.category === 'EXPENSE') {
         expenses.push(data);
         totalExpense += Math.abs(balance);
       }
@@ -191,12 +185,12 @@ router.get('/equity', async (req, res, next) => {
     // Get equity accounts
     const equityAccounts = await Account.findAll({
       where: { is_active: true },
-      include: [{ model: AccountType, as: 'account_type' }],
       order: [['account_number', 'ASC']]
     });
 
     for (const account of equityAccounts) {
-      if (account.account_type.category === 'EQUITY') {
+      const accountType = await AccountType.findByPk(account.account_type_id);
+      if (accountType.category === 'EQUITY') {
         const beginningBalance = await getAccountBalance(account.id, startDate);
         const endingBalance = await getAccountBalance(account.id, endDate);
 
@@ -315,7 +309,7 @@ router.get('/notes', async (req, res, next) => {
       where: {
         status: 'ACTIVE',
         join_date: {
-          [Op.gte]: new Date(new Date().getFullYear(), 0, 1)
+          gte: new Date(new Date().getFullYear(), 0, 1)
         }
       }
     });

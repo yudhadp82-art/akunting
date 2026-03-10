@@ -227,9 +227,13 @@ router.get('/export/products', async (req, res, next) => {
 router.get('/export/savings', async (req, res, next) => {
   try {
     const savings = await Savings.findAll({
-      include: [{ model: Member, as: 'member' }],
       order: [['account_number', 'ASC']]
     });
+
+    // Manually load members
+    for (const saving of savings) {
+      if (saving.member_id) saving.member = await Member.findByPk(saving.member_id);
+    }
 
     // Format for CSV
     const csvData = savings.map(saving => ({
@@ -256,12 +260,15 @@ router.get('/export/savings', async (req, res, next) => {
 router.get('/export/loans', async (req, res, next) => {
   try {
     const loans = await Loan.findAll({
-      include: [
-        { model: Member, as: 'member' },
-        { model: require('./LoanType'), as: 'loan_type' }
-      ],
       order: [['created_at', 'DESC']]
     });
+
+    // Manually load members and loan types
+    const { LoanType } = require('../models');
+    for (const loan of loans) {
+      if (loan.member_id) loan.member = await Member.findByPk(loan.member_id);
+      if (loan.loan_type_id) loan.loan_type = await LoanType.findByPk(loan.loan_type_id);
+    }
 
     // Format for CSV
     const csvData = loans.map(loan => ({
@@ -348,12 +355,12 @@ async function generateMemberNumber(MemberModel) {
 
   // Find last member number
   const lastMember = await MemberModel.findOne({
-    order: [['member_number', 'DESC']],
     where: {
       member_number: {
-        [require('sequelize').Op.like]: `${prefix}-${year}-%`
+        like: `${prefix}-${year}-`
       }
-    }
+    },
+    order: [['member_number', 'DESC']]
   });
 
   let nextNumber = 1;

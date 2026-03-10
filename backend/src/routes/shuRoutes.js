@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { SHUPeriod, SHUDistribution, SHUAllocationRule, Member, JournalEntry, JournalLine } = require('../models');
+const { SHUPeriod, SHUDistribution, SHUAllocationRule, Member, JournalEntry, JournalLine, Savings } = require('../models');
 const { DEFAULT_SHU_ALLOCATION } = require('../config/constants');
-const { Op } = require('sequelize');
 
 // Get all SHU periods
 router.get('/periods', async (req, res, next) => {
@@ -82,35 +81,31 @@ router.post('/periods/:id/calculate', async (req, res, next) => {
     const { JournalEntry, JournalLine, Account } = require('../models');
 
     const revenueAccounts = await Account.findAll({
-      where: { account_number: { [Op.like]: '4-%' } }
+      where: { account_number: { like: '4-' } }
     });
 
     const expenseAccounts = await Account.findAll({
-      where: { account_number: { [Op.like]: '5-%' } }
+      where: { account_number: { like: '5-' } }
     });
 
     const revenueAccountIds = revenueAccounts.map(a => a.id);
     const expenseAccountIds = expenseAccounts.map(a => a.id);
 
     const journalLines = await JournalLine.findAll({
-      include: [
-        {
-          model: JournalEntry,
-          as: 'journal_entry',
-          where: {
-            is_posted: true,
-            transaction_date: {
-              [Op.between]: [period.start_date, period.end_date]
-            }
-          }
+      where: {
+        transaction_date: {
+          between: [new Date(period.start_date), new Date(period.end_date)]
         }
-      ]
+      }
     });
 
     let totalRevenue = 0;
     let totalExpense = 0;
 
     for (const line of journalLines) {
+      const entry = await JournalEntry.findByPk(line.journal_entry_id);
+      if (!entry || !entry.is_posted) continue;
+
       if (revenueAccountIds.includes(line.account_id)) {
         totalRevenue += parseFloat(line.credit || 0) - parseFloat(line.debit || 0);
       }
@@ -133,7 +128,7 @@ router.post('/periods/:id/calculate', async (req, res, next) => {
     // Create allocation rules
     await SHUAllocationRule.destroy({ where: { shu_period_id: periodId } });
 
-    await SHUAllocationRule.bulkCreate([
+    const allocations = [
       {
         shu_period_id: periodId,
         allocation_type: 'JASA_MODAL',
@@ -169,16 +164,19 @@ router.post('/periods/:id/calculate', async (req, res, next) => {
         amount: netIncome * (DEFAULT_SHU_ALLOCATION.DANA_CADANGAN / 100),
         description: 'Dana cadangan koperasi'
       }
-    ]);
+    ];
 
-    // Get the updated period with allocations
-    const updatedPeriod = await SHUPeriod.findByPk(periodId, {
-      include: [{ model: SHUAllocationRule, as: 'allocation_rules' }]
-    });
+    const createdRules = [];
+    for (const alloc of allocations) {
+      const rule = await SHUAllocationRule.create(alloc);
+      createdRules.push(rule);
+    }
+
+    period.allocation_rules = createdRules;
 
     res.json({
       success: true,
-      data: updatedPeriod,
+      data: period,
       message: 'SHU calculated successfully'
     });
   } catch (error) {
@@ -191,9 +189,7 @@ router.post('/periods/:id/distribute', async (req, res, next) => {
   try {
     const periodId = req.params.id;
 
-    const period = await SHUPeriod.findByPk(periodId, {
-      include: [{ model: SHUAllocationRule, as: 'allocation_rules' }]
-    });
+    const period = await SHUPeriod.findByPk(periodId);
 
     if (!period) {
       return res.status(404).json({
@@ -209,9 +205,12 @@ router.post('/periods/:id/distribute', async (req, res, next) => {
       });
     }
 
+    // Load allocation rules manually
+    const allocationRules = await SHUAllocationRule.findAll({ where: { shu_period_id: periodId } });
+
     // Get allocation rules
-    const jasaModalRule = period.allocation_rules.find(r => r.allocation_type === 'JASA_MODAL');
-    const jasaUsahaRule = period.allocation_rules.find(r => r.allocation_type === 'JASA_USAHA');
+    const jasaModalRule = allocationRules.find(r => r.allocation_type === 'JASA_MODAL');
+    const jasaUsahaRule = allocationRules.find(r => r.allocation_type === 'JASA_USAHA');
 
     if (!jasaModalRule || !jasaUsahaRule) {
       return res.status(400).json({
@@ -222,22 +221,23 @@ router.post('/periods/:id/distribute', async (req, res, next) => {
 
     // Get active members
     const activeMembers = await Member.findAll({
-      where: { status: 'ACTIVE' },
-      include: [{ model: require('../models').Savings, as: 'savings' }]
+      where: { status: 'ACTIVE' }
     });
 
-    // Get total savings for Jasa Modal calculation
-    const totalSavings = activeMembers.reduce((sum, member) => {
-      return sum + member.savings.reduce((s, saving) => s + parseFloat(saving.balance), 0);
-    }, 0);
+    // Manually load savings for each member and calculate total savings
+    let totalSavings = 0;
+    for (const member of activeMembers) {
+      member.savings = await Savings.findAll({ where: { member_id: member.id, is_active: true } });
+      member.totalMemberSavings = member.savings.reduce((s, saving) => s + parseFloat(saving.balance || 0), 0);
+      totalSavings += member.totalMemberSavings;
+    }
 
     // Distribute SHU to each member
     const distributions = [];
 
     for (const member of activeMembers) {
       // Calculate Jasa Modal based on savings
-      const memberSavings = member.savings.reduce((s, saving) => s + parseFloat(saving.balance), 0);
-      const jasaModalShare = totalSavings > 0 ? memberSavings / totalSavings : 0;
+      const jasaModalShare = totalSavings > 0 ? member.totalMemberSavings / totalSavings : 0;
       const jasaModalAmount = jasaModalRule.amount * jasaModalShare;
 
       // Calculate Jasa Usaha based on transactions (simplified for now)
@@ -246,7 +246,7 @@ router.post('/periods/:id/distribute', async (req, res, next) => {
 
       const totalSHU = jasaModalAmount + jasaUsahaAmount;
 
-      distributions.push({
+      const distribution = await SHUDistribution.create({
         shu_period_id: periodId,
         member_id: member.id,
         jasa_modal_share: jasaModalShare * 100,
@@ -256,15 +256,13 @@ router.post('/periods/:id/distribute', async (req, res, next) => {
         total_shu_amount: totalSHU,
         distributed_date: new Date()
       });
+      distributions.push(distribution);
 
       // Update member's total SHU earned
       await member.update({
-        total_shu_earned: parseFloat(member.total_shu_earned) + totalSHU
+        total_shu_earned: parseFloat(member.total_shu_earned || 0) + totalSHU
       });
     }
-
-    // Create distributions
-    await SHUDistribution.bulkCreate(distributions);
 
     // Update period status
     await period.update({
@@ -272,16 +270,12 @@ router.post('/periods/:id/distribute', async (req, res, next) => {
       distributed_at: new Date()
     });
 
-    const updatedPeriod = await SHUPeriod.findByPk(periodId, {
-      include: [
-        { model: SHUAllocationRule, as: 'allocation_rules' },
-        { model: SHUDistribution, as: 'distributions', include: [{ model: Member, as: 'member' }] }
-      ]
-    });
+    period.allocation_rules = allocationRules;
+    period.distributions = distributions;
 
     res.json({
       success: true,
-      data: updatedPeriod,
+      data: period,
       message: 'SHU distributed successfully'
     });
   } catch (error) {
@@ -292,18 +286,20 @@ router.post('/periods/:id/distribute', async (req, res, next) => {
 // Get SHU period details with allocations
 router.get('/periods/:id', async (req, res, next) => {
   try {
-    const period = await SHUPeriod.findByPk(req.params.id, {
-      include: [
-        { model: SHUAllocationRule, as: 'allocation_rules' },
-        { model: SHUDistribution, as: 'distributions', include: [{ model: Member, as: 'member' }] }
-      ]
-    });
+    const period = await SHUPeriod.findByPk(req.params.id);
 
     if (!period) {
       return res.status(404).json({
         success: false,
         error: 'SHU period not found'
       });
+    }
+
+    // Load associations manually
+    period.allocation_rules = await SHUAllocationRule.findAll({ where: { shu_period_id: period.id } });
+    period.distributions = await SHUDistribution.findAll({ where: { shu_period_id: period.id } });
+    for (const dist of period.distributions) {
+      if (dist.member_id) dist.member = await Member.findByPk(dist.member_id);
     }
 
     res.json({

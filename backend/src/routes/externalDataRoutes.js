@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Member, Savings, SavingsType, Transaction, sequelize } = require('../models');
+const { Member, Savings, SavingsType, Transaction } = require('../models');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { parse } = require('csv-parse');

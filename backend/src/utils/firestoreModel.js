@@ -11,26 +11,74 @@ const {
   limit, 
   orderBy, 
   serverTimestamp,
-  getCountFromServer
+  getCountFromServer,
+  increment: firestoreIncrement
 } = require("firebase/firestore");
-const { db, admin } = require("../config/firebase");
+const { db, admin, adminApp } = require("../config/firebase");
 
 class FirestoreModel {
   constructor(collectionName) {
     this.collectionName = collectionName;
-    this.isAdmin = !!admin && !!admin.apps.length;
+    this.isAdmin = !!adminApp;
     this.collectionRef = this.isAdmin ? db.collection(collectionName) : collection(db, collectionName);
+  }
+
+  // Helper to handle Sequelize-like where clauses (Op support)
+  _processWhere(q, whereClause) {
+    if (!whereClause) return q;
+
+    Object.keys(whereClause).forEach(key => {
+      const val = whereClause[key];
+      
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        // Handle Sequelize Operators (simplified)
+        Object.getOwnPropertySymbols(val).concat(Object.keys(val)).forEach(sym => {
+          const opName = typeof sym === 'symbol' ? sym.description : sym;
+          const opVal = val[sym];
+
+          if (this.isAdmin) {
+            if (opName === 'between') q = q.where(key, '>=', opVal[0]).where(key, '<=', opVal[1]);
+            else if (opName === 'gte') q = q.where(key, '>=', opVal);
+            else if (opName === 'gt') q = q.where(key, '>', opVal);
+            else if (opName === 'lte') q = q.where(key, '<=', opVal);
+            else if (opName === 'lt') q = q.where(key, '<', opVal);
+            else if (opName === 'in') q = q.where(key, 'in', opVal);
+            else if (opName === 'like') {
+              // Firestore doesn't support LIKE. Best effort: prefix search
+              const prefix = opVal.replace(/%/g, '');
+              q = q.where(key, '>=', prefix).where(key, '<=', prefix + '\uf8ff');
+            }
+          } else {
+            if (opName === 'between') {
+              q = query(q, where(key, '>=', opVal[0]), where(key, '<=', opVal[1]));
+            }
+            else if (opName === 'gte') q = query(q, where(key, '>=', opVal));
+            else if (opName === 'gt') q = query(q, where(key, '>', opVal));
+            else if (opName === 'lte') q = query(q, where(key, '<=', opVal));
+            else if (opName === 'lt') q = query(q, where(key, '<', opVal));
+            else if (opName === 'in') q = query(q, where(key, 'in', opVal));
+            else if (opName === 'like') {
+              const prefix = opVal.replace(/%/g, '');
+              q = query(q, where(key, '>=', prefix), where(key, '<=', prefix + '\uf8ff'));
+            }
+          }
+        });
+      } else {
+        // Simple equality
+        if (this.isAdmin) {
+          q = q.where(key, "==", val);
+        } else {
+          q = query(q, where(key, "==", val));
+        }
+      }
+    });
+    return q;
   }
 
   async findAndCountAll({ where: whereClause = {}, limit: limitVal = 10, offset = 0, order = [] } = {}) {
     try {
       if (this.isAdmin) {
-        // Firebase Admin SDK Logic
-        let q = this.collectionRef;
-        Object.keys(whereClause).forEach(key => {
-          q = q.where(key, "==", whereClause[key]);
-        });
-
+        let q = this._processWhere(this.collectionRef, whereClause);
         const totalCount = (await q.count().get()).data().count;
 
         if (order.length > 0) {
@@ -48,12 +96,7 @@ class FirestoreModel {
 
         return { count: totalCount, rows };
       } else {
-        // Firebase Client SDK Logic
-        let q = query(this.collectionRef);
-        Object.keys(whereClause).forEach(key => {
-          q = query(q, where(key, "==", whereClause[key]));
-        });
-
+        let q = this._processWhere(query(this.collectionRef), whereClause);
         const countSnapshot = await getCountFromServer(q);
         const totalCount = countSnapshot.data().count;
 
@@ -90,20 +133,22 @@ class FirestoreModel {
       if (this.isAdmin) {
         const docSnap = await this.collectionRef.doc(id.toString()).get();
         if (docSnap.exists) {
+          const data = docSnap.data();
           return { 
             id: docSnap.id, 
-            ...docSnap.data(), 
-            update: (data) => this.update(docSnap.id, data) 
+            ...data, 
+            update: (updateData) => this.update(docSnap.id, updateData) 
           };
         }
       } else {
         const docRef = doc(db, this.collectionName, id.toString());
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
+          const data = docSnap.data();
           return { 
             id: docSnap.id, 
-            ...docSnap.data(), 
-            update: (data) => this.update(docSnap.id, data) 
+            ...data, 
+            update: (updateData) => this.update(docSnap.id, updateData) 
           };
         }
       }
@@ -114,23 +159,19 @@ class FirestoreModel {
     }
   }
 
-  async findOne({ where: whereClause = {} } = {}) {
+  async findOne(options = {}) {
+    const { where: whereClause = {} } = options;
     try {
       if (this.isAdmin) {
-        let q = this.collectionRef.limit(1);
-        Object.keys(whereClause).forEach(key => {
-          q = q.where(key, "==", whereClause[key]);
-        });
+        let q = this._processWhere(this.collectionRef, whereClause).limit(1);
         const snapshot = await q.get();
         if (!snapshot.empty) {
           const docSnap = snapshot.docs[0];
           return { id: docSnap.id, ...docSnap.data(), update: (data) => this.update(docSnap.id, data) };
         }
       } else {
-        let q = query(this.collectionRef, limit(1));
-        Object.keys(whereClause).forEach(key => {
-          q = query(q, where(key, "==", whereClause[key]));
-        });
+        let q = this._processWhere(query(this.collectionRef), whereClause);
+        q = query(q, limit(1));
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
           const docSnap = querySnapshot.docs[0];
@@ -161,9 +202,6 @@ class FirestoreModel {
       }
     } catch (error) {
       console.error(`Firestore Error [create] for ${this.collectionName}:`, error.message);
-      if (error.message.includes('PERMISSION_DENIED')) {
-        console.error('ACTION REQUIRED: Update your Firestore Security Rules in the Firebase Console.');
-      }
       throw error;
     }
   }
@@ -188,6 +226,21 @@ class FirestoreModel {
     }
   }
 
+  async increment(field, options = {}) {
+    const { by = 1, where: whereClause } = options;
+    const records = await this.findAll({ where: whereClause });
+    for (const record of records) {
+      await this.update(record.id, {
+        [field]: this.isAdmin ? admin.firestore.FieldValue.increment(by) : firestoreIncrement(by)
+      });
+    }
+  }
+
+  async decrement(field, options = {}) {
+    const { by = 1, where: whereClause } = options;
+    await this.increment(field, { by: -by, where: whereClause });
+  }
+
   async delete(id) {
     try {
       if (this.isAdmin) {
@@ -203,24 +256,23 @@ class FirestoreModel {
     }
   }
 
+  async destroy(options = {}) {
+    const { where: whereClause } = options;
+    const records = await this.findAll({ where: whereClause });
+    for (const record of records) {
+      await this.delete(record.id);
+    }
+    return records.length;
+  }
+
   async count(options = {}) {
     try {
       if (this.isAdmin) {
-        let q = this.collectionRef;
-        if (options.where) {
-          Object.keys(options.where).forEach(key => {
-            q = q.where(key, "==", options.where[key]);
-          });
-        }
+        let q = this._processWhere(this.collectionRef, options.where);
         const countSnapshot = await q.count().get();
         return countSnapshot.data().count;
       } else {
-        let q = query(this.collectionRef);
-        if (options.where) {
-          Object.keys(options.where).forEach(key => {
-            q = query(q, where(key, "==", options.where[key]));
-          });
-        }
+        let q = this._processWhere(query(this.collectionRef), options.where);
         const countSnapshot = await getCountFromServer(q);
         return countSnapshot.data().count;
       }
@@ -228,6 +280,11 @@ class FirestoreModel {
       console.error(`Firestore Error [count] for ${this.collectionName}:`, error.message);
       throw error;
     }
+  }
+
+  async sum(field, options = {}) {
+    const records = await this.findAll(options);
+    return records.reduce((total, record) => total + (parseFloat(record[field]) || 0), 0);
   }
 }
 

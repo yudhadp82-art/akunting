@@ -13,7 +13,7 @@ router.get('/transactions', async (req, res, next) => {
     if (status) where.status = status;
     if (start_date && end_date) {
       where.created_at = {
-        [require('sequelize').Op.between]: [start_date, end_date]
+        between: [new Date(start_date), new Date(end_date)]
       };
     }
 
@@ -21,12 +21,16 @@ router.get('/transactions', async (req, res, next) => {
       where,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      include: [
-        { model: Member, as: 'member' },
-        { model: POSLineItem, as: 'line_items' }
-      ],
       order: [['created_at', 'DESC']]
     });
+
+    // Manually load line items for each transaction
+    for (const row of rows) {
+      row.line_items = await POSLineItem.findAll({ where: { pos_transaction_id: row.id } });
+      if (row.member_id) {
+        row.member = await Member.findByPk(row.member_id);
+      }
+    }
 
     res.json({
       success: true,
@@ -45,18 +49,23 @@ router.get('/transactions', async (req, res, next) => {
 // Get POS transaction by ID
 router.get('/transactions/:id', async (req, res, next) => {
   try {
-    const transaction = await POSTransaction.findByPk(req.params.id, {
-      include: [
-        { model: Member, as: 'member' },
-        { model: POSLineItem, as: 'line_items', include: [{ model: Product, as: 'product' }] }
-      ]
-    });
+    const transaction = await POSTransaction.findByPk(req.params.id);
 
     if (!transaction) {
       return res.status(404).json({
         success: false,
         error: 'Transaction not found'
       });
+    }
+
+    // Load associations manually
+    transaction.line_items = await POSLineItem.findAll({ where: { pos_transaction_id: transaction.id } });
+    for (const item of transaction.line_items) {
+      item.product = await Product.findByPk(item.product_id);
+    }
+    
+    if (transaction.member_id) {
+      transaction.member = await Member.findByPk(transaction.member_id);
     }
 
     res.json({
@@ -266,11 +275,8 @@ router.get('/products', async (req, res, next) => {
 
     if (category) where.category = category;
     if (search) {
-      where[require('sequelize').Op.or] = [
-        { name: { [require('sequelize').Op.like]: `%${search}%` } },
-        { product_code: { [require('sequelize').Op.like]: `%${search}%` } },
-        { barcode: { [require('sequelize').Op.like]: `%${search}%` } }
-      ];
+      // Simplified search for Firestore (prefix search)
+      where.name = { like: search };
     }
 
     const products = await Product.findAll({
@@ -290,15 +296,15 @@ router.get('/products', async (req, res, next) => {
 // Get low stock products
 router.get('/products/low-stock', async (req, res, next) => {
   try {
-    const products = await Product.findAll({
-      where: {
-        is_active: true,
-        stock: {
-          [require('sequelize').Op.lt]: require('sequelize').col('min_stock')
-        }
-      },
-      order: [['stock', 'ASC']]
+    // Firestore can't compare two columns in a single query easily.
+    // We'll fetch active products and filter in memory for simplicity.
+    const allProducts = await Product.findAll({
+      where: { is_active: true }
     });
+
+    const products = allProducts
+      .filter(p => p.stock < p.min_stock)
+      .sort((a, b) => a.stock - b.stock);
 
     res.json({
       success: true,
@@ -318,9 +324,7 @@ router.get('/summary/today', async (req, res, next) => {
     const transactions = await POSTransaction.findAll({
       where: {
         status: 'COMPLETED',
-        created_at: {
-          [require('sequelize').Op.gte]: today
-        }
+        created_at: { gte: today }
       }
     });
 

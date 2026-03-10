@@ -17,12 +17,14 @@ router.get('/', async (req, res, next) => {
       where,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      include: [
-        { model: Member, as: 'member' },
-        { model: SavingsType, as: 'savings_type' }
-      ],
       order: [['created_at', 'DESC']]
     });
+
+    // Manually load associations
+    for (const row of rows) {
+      if (row.member_id) row.member = await Member.findByPk(row.member_id);
+      if (row.savings_type_id) row.savings_type = await SavingsType.findByPk(row.savings_type_id);
+    }
 
     res.json({
       success: true,
@@ -41,12 +43,7 @@ router.get('/', async (req, res, next) => {
 // Get savings account by ID
 router.get('/:id', async (req, res, next) => {
   try {
-    const savings = await Savings.findByPk(req.params.id, {
-      include: [
-        { model: Member, as: 'member' },
-        { model: SavingsType, as: 'savings_type' }
-      ]
-    });
+    const savings = await Savings.findByPk(req.params.id);
 
     if (!savings) {
       return res.status(404).json({
@@ -54,6 +51,9 @@ router.get('/:id', async (req, res, next) => {
         error: 'Savings account not found'
       });
     }
+
+    if (savings.member_id) savings.member = await Member.findByPk(savings.member_id);
+    if (savings.savings_type_id) savings.savings_type = await SavingsType.findByPk(savings.savings_type_id);
 
     res.json({
       success: true,
@@ -88,16 +88,12 @@ router.post('/', async (req, res, next) => {
       is_active: true
     });
 
-    const saved = await Savings.findByPk(savings.id, {
-      include: [
-        { model: Member, as: 'member' },
-        { model: SavingsType, as: 'savings_type' }
-      ]
-    });
+    if (savings.member_id) savings.member = await Member.findByPk(savings.member_id);
+    if (savings.savings_type_id) savings.savings_type = await SavingsType.findByPk(savings.savings_type_id);
 
     res.status(201).json({
       success: true,
-      data: saved,
+      data: savings,
       message: 'Savings account created successfully'
     });
   } catch (error) {

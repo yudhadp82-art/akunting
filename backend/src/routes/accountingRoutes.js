@@ -7,29 +7,21 @@ const { generateVoucherNumber } = require('../utils/generators');
 router.get('/accounts', async (req, res, next) => {
   try {
     const accounts = await Account.findAll({
-      include: [{ model: AccountType, as: 'account_type' }],
       order: [['account_number', 'ASC']]
     });
+
+    // Manually load account types
+    for (const account of accounts) {
+      if (account.account_type_id) {
+        account.account_type = await AccountType.findByPk(account.account_type_id);
+      }
+    }
 
     res.json({
       success: true,
       data: accounts
     });
   } catch (error) {
-    if (error.name === 'SequelizeConnectionRefusedError' || error.name === 'SequelizeConnectionError') {
-      // Return mock data for development when DB is not available
-      return res.json({
-        success: true,
-        data: [
-          { id: 1, account_number: '1-1-1-01', name: 'Kas dan Bank', balance: 5000000, account_type: { name: 'Aset' } },
-          { id: 2, account_number: '1-1-2-01', name: 'Piutang Anggota', balance: 25000000, account_type: { name: 'Aset' } },
-          { id: 3, account_number: '2-1-1-01', name: 'Simpanan Pokok', balance: 15000000, account_type: { name: 'Kewajiban' } },
-          { id: 4, account_number: '4-1-1-01', name: 'Pendapatan Jasa', balance: 2500000, account_type: { name: 'Pendapatan' } },
-          { id: 5, account_number: '5-1-1-01', name: 'Beban Listrik', balance: 150000, account_type: { name: 'Beban' } },
-        ],
-        message: 'Using mock data (Database connection failed)'
-      });
-    }
     next(error);
   }
 });
@@ -37,15 +29,17 @@ router.get('/accounts', async (req, res, next) => {
 // Get account by ID
 router.get('/accounts/:id', async (req, res, next) => {
   try {
-    const account = await Account.findByPk(req.params.id, {
-      include: [{ model: AccountType, as: 'account_type' }]
-    });
+    const account = await Account.findByPk(req.params.id);
 
     if (!account) {
       return res.status(404).json({
         success: false,
         error: 'Account not found'
       });
+    }
+
+    if (account.account_type_id) {
+      account.account_type = await AccountType.findByPk(account.account_type_id);
     }
 
     res.json({
@@ -82,7 +76,7 @@ router.get('/journal', async (req, res, next) => {
     if (is_posted !== undefined) where.is_posted = is_posted === 'true';
     if (start_date && end_date) {
       where.transaction_date = {
-        [require('sequelize').Op.between]: [start_date, end_date]
+        between: [new Date(start_date), new Date(end_date)]
       };
     }
 
@@ -90,15 +84,18 @@ router.get('/journal', async (req, res, next) => {
       where,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      include: [
-        {
-          model: JournalLine,
-          as: 'lines',
-          include: [{ model: Account, as: 'account' }]
-        }
-      ],
       order: [['transaction_date', 'DESC'], ['created_at', 'DESC']]
     });
+
+    // Manually load lines and accounts for each journal entry
+    for (const row of rows) {
+      row.lines = await JournalLine.findAll({ where: { journal_entry_id: row.id } });
+      for (const line of row.lines) {
+        if (line.account_id) {
+          line.account = await Account.findByPk(line.account_id);
+        }
+      }
+    }
 
     res.json({
       success: true,
@@ -110,40 +107,6 @@ router.get('/journal', async (req, res, next) => {
       }
     });
   } catch (error) {
-    if (error.name === 'SequelizeConnectionRefusedError' || error.name === 'SequelizeConnectionError') {
-      // Return mock data for development when DB is not available
-      return res.json({
-        success: true,
-        data: [
-          {
-            id: 1,
-            voucher_number: 'JV2403080001',
-            transaction_date: '2024-03-08',
-            description: 'Setor Simpanan Wajib - Budi Santoso',
-            reference_type: 'SAVING_DEPOSIT',
-            is_posted: true,
-            lines: [
-              { account: { name: 'Kas dan Bank', account_number: '1-1-1-01' }, debit: 50000, credit: 0, description: 'Setor Simpanan' },
-              { account: { name: 'Simpanan Wajib', account_number: '2-1-1-01' }, debit: 0, credit: 50000, description: 'Simpanan Wajib' },
-            ],
-          },
-          {
-            id: 2,
-            voucher_number: 'JV2403080002',
-            transaction_date: '2024-03-08',
-            description: 'Beban Listrik Kantor',
-            reference_type: 'ADJUSTMENT',
-            is_posted: false,
-            lines: [
-              { account: { name: 'Beban Listrik', account_number: '5-1-1-01' }, debit: 150000, credit: 0, description: 'Biaya Listrik' },
-              { account: { name: 'Kas dan Bank', account_number: '1-1-1-01' }, debit: 0, credit: 150000, description: 'Bayar Listrik' },
-            ],
-          },
-        ],
-        pagination: { total: 2, page: 1, pages: 1 },
-        message: 'Using mock data (Database connection failed)'
-      });
-    }
     next(error);
   }
 });
@@ -196,30 +159,29 @@ router.post('/journal', async (req, res, next) => {
     });
 
     // Create journal lines
-    const journalLines = lines.map(line => ({
-      journal_entry_id: journalEntry.id,
-      account_id: line.account_id,
-      debit: line.debit || 0,
-      credit: line.credit || 0,
-      description: line.description,
-      member_id: line.member_id
-    }));
+    const journalLines = [];
+    for (const line of lines) {
+      const createdLine = await JournalLine.create({
+        journal_entry_id: journalEntry.id,
+        account_id: line.account_id,
+        debit: line.debit || 0,
+        credit: line.credit || 0,
+        description: line.description,
+        member_id: line.member_id || null
+      });
+      journalLines.push(createdLine);
+    }
 
-    await JournalLine.bulkCreate(journalLines);
-
-    const saved = await JournalEntry.findByPk(journalEntry.id, {
-      include: [
-        {
-          model: JournalLine,
-          as: 'lines',
-          include: [{ model: Account, as: 'account' }]
-        }
-      ]
-    });
+    journalEntry.lines = journalLines;
+    for (const line of journalEntry.lines) {
+      if (line.account_id) {
+        line.account = await Account.findByPk(line.account_id);
+      }
+    }
 
     res.status(201).json({
       success: true,
-      data: saved,
+      data: journalEntry,
       message: 'Journal entry created successfully'
     });
   } catch (error) {
@@ -230,9 +192,7 @@ router.post('/journal', async (req, res, next) => {
 // Post journal entry
 router.post('/journal/:id/post', async (req, res, next) => {
   try {
-    const journalEntry = await JournalEntry.findByPk(req.params.id, {
-      include: [{ model: JournalLine, as: 'lines' }]
-    });
+    const journalEntry = await JournalEntry.findByPk(req.params.id);
 
     if (!journalEntry) {
       return res.status(404).json({
@@ -247,6 +207,9 @@ router.post('/journal/:id/post', async (req, res, next) => {
         error: 'Journal entry already posted'
       });
     }
+
+    // Load lines manually
+    journalEntry.lines = await JournalLine.findAll({ where: { journal_entry_id: journalEntry.id } });
 
     // Update account balances
     for (const line of journalEntry.lines) {
@@ -267,7 +230,7 @@ router.post('/journal/:id/post', async (req, res, next) => {
       }
 
       await account.update({
-        balance: parseFloat(account.balance) + balanceChange
+        balance: parseFloat(account.balance || 0) + balanceChange
       });
     }
 
@@ -306,9 +269,9 @@ router.delete('/journal/:id', async (req, res, next) => {
       });
     }
 
-    // Delete lines first (though with CASCADE it might be automatic)
+    // Delete lines first
     await JournalLine.destroy({ where: { journal_entry_id: journalEntry.id } });
-    await journalEntry.destroy();
+    await JournalEntry.delete(journalEntry.id);
 
     res.json({
       success: true,
@@ -323,33 +286,32 @@ router.delete('/journal/:id', async (req, res, next) => {
 router.get('/trial-balance', async (req, res, next) => {
   try {
     const { as_of } = req.query;
-    const asOfDate = as_of || new Date();
+    const asOfDate = as_of ? new Date(as_of) : new Date();
 
     // Get all posted journal entries up to the specified date
     const postedEntries = await JournalEntry.findAll({
       where: {
         is_posted: true,
-        transaction_date: { [require('sequelize').Op.lte]: asOfDate }
-      },
-      include: [{ model: JournalLine, as: 'lines' }]
+        transaction_date: { lte: asOfDate }
+      }
     });
 
     // Calculate trial balance
     const trialBalance = {};
 
     for (const entry of postedEntries) {
-      for (const line of entry.lines) {
+      const lines = await JournalLine.findAll({ where: { journal_entry_id: entry.id } });
+      for (const line of lines) {
         const accountId = line.account_id;
 
         if (!trialBalance[accountId]) {
-          const account = await Account.findByPk(accountId, {
-            include: [{ model: AccountType, as: 'account_type' }]
-          });
+          const account = await Account.findByPk(accountId);
+          const accountType = await AccountType.findByPk(account.account_type_id);
           trialBalance[accountId] = {
             account_id: accountId,
             account_number: account.account_number,
             account_name: account.name,
-            account_type: account.account_type.name,
+            account_type: accountType.name,
             debit: 0,
             credit: 0
           };
@@ -386,9 +348,7 @@ router.get('/ledger/:accountId', async (req, res, next) => {
     const { accountId } = req.params;
     const { start_date, end_date } = req.query;
 
-    const account = await Account.findByPk(accountId, {
-      include: [{ model: AccountType, as: 'account_type' }]
-    });
+    const account = await Account.findByPk(accountId);
 
     if (!account) {
       return res.status(404).json({
@@ -397,50 +357,50 @@ router.get('/ledger/:accountId', async (req, res, next) => {
       });
     }
 
+    const accountType = await AccountType.findByPk(account.account_type_id);
+
     const where = { account_id: accountId };
 
     if (start_date || end_date) {
-      where.transaction_date = {};
-      if (start_date) where.transaction_date[require('sequelize').Op.gte] = start_date;
-      if (end_date) where.transaction_date[require('sequelize').Op.lte] = end_date;
+      const dateFilter = {};
+      if (start_date) dateFilter.gte = new Date(start_date);
+      if (end_date) dateFilter.lte = new Date(end_date);
+      where.transaction_date = dateFilter;
     }
 
     const journalLines = await JournalLine.findAll({
       where,
-      include: [
-        {
-          model: JournalEntry,
-          as: 'journal_entry',
-          where: { is_posted: true }
-        }
-      ],
       order: [['created_at', 'ASC']]
     });
 
     // Calculate running balance
     let runningBalance = 0;
-    const ledger = journalLines.map(line => {
-      const entry = line.journal_entry;
-      const balanceChange = account.account_type.is_debit_balance
+    const ledger = [];
+    
+    for (const line of journalLines) {
+      const entry = await JournalEntry.findByPk(line.journal_entry_id);
+      if (!entry || !entry.is_posted) continue;
+
+      const balanceChange = accountType.is_debit_balance
         ? parseFloat(line.debit) - parseFloat(line.credit)
         : parseFloat(line.credit) - parseFloat(line.debit);
 
       runningBalance += balanceChange;
 
-      return {
+      ledger.push({
         date: entry.transaction_date,
         voucher_number: entry.voucher_number,
         description: line.description || entry.description,
         debit: parseFloat(line.debit),
         credit: parseFloat(line.credit),
         balance: runningBalance
-      };
-    });
+      });
+    }
 
     res.json({
       success: true,
       data: {
-        account: account,
+        account: { ...account, account_type: accountType },
         ledger: ledger
       }
     });

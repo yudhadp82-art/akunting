@@ -3,20 +3,23 @@ const { initializeApp: initializeClientApp } = require("firebase/app");
 const { getFirestore: getClientFirestore } = require("firebase/firestore");
 const { getAuth: getClientAuth } = require("firebase/auth");
 
-let app, db, auth;
+let db, auth;
+let adminApp = null;
 
-// Use Firebase Admin for Backend (Bypasses security rules)
-if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+// Initialize Firebase Admin SDK for Backend (Bypasses security rules)
+const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+
+if (serviceAccountKey) {
   try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-    admin.initializeApp({
+    const serviceAccount = JSON.parse(serviceAccountKey);
+    adminApp = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
-    });
-    db = admin.firestore();
-    auth = admin.auth();
-    console.log("Firebase Admin initialized successfully");
+    }, 'admin-app'); // Use a name to avoid conflicts
+    db = adminApp.firestore();
+    auth = adminApp.auth();
+    console.log("🔥 Firebase Admin initialized successfully (Bypassing rules)");
   } catch (error) {
-    console.error("Firebase Admin initialization failed, falling back to Client SDK:", error.message);
+    console.error("❌ Firebase Admin failed to initialize:", error.message);
   }
 }
 
@@ -31,10 +34,14 @@ if (!db) {
     appId: process.env.FIREBASE_APP_ID
   };
 
-  const clientApp = initializeClientApp(firebaseConfig);
-  db = getClientFirestore(clientApp);
-  auth = getClientAuth(clientApp);
-  console.log("Firebase Client SDK initialized (Security rules apply)");
+  try {
+    const clientApp = initializeClientApp(firebaseConfig);
+    db = getClientFirestore(clientApp);
+    auth = getClientAuth(clientApp);
+    console.log("🔌 Firebase Client SDK initialized (Security rules apply)");
+  } catch (error) {
+    console.error("❌ Firebase Client SDK failed to initialize:", error.message);
+  }
 }
 
-module.exports = { app, db, auth, admin };
+module.exports = { db, auth, admin, adminApp };

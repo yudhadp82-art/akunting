@@ -17,12 +17,14 @@ router.get('/', async (req, res, next) => {
       where,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      include: [
-        { model: Member, as: 'member' },
-        { model: LoanType, as: 'loan_type' }
-      ],
       order: [['created_at', 'DESC']]
     });
+
+    // Manually load associations
+    for (const row of rows) {
+      if (row.member_id) row.member = await Member.findByPk(row.member_id);
+      if (row.loan_type_id) row.loan_type = await LoanType.findByPk(row.loan_type_id);
+    }
 
     res.json({
       success: true,
@@ -41,13 +43,7 @@ router.get('/', async (req, res, next) => {
 // Get loan by ID
 router.get('/:id', async (req, res, next) => {
   try {
-    const loan = await Loan.findByPk(req.params.id, {
-      include: [
-        { model: Member, as: 'member' },
-        { model: LoanType, as: 'loan_type' },
-        { model: LoanRepayment, as: 'repayments' }
-      ]
-    });
+    const loan = await Loan.findByPk(req.params.id);
 
     if (!loan) {
       return res.status(404).json({
@@ -55,6 +51,14 @@ router.get('/:id', async (req, res, next) => {
         error: 'Loan not found'
       });
     }
+
+    // Load associations manually
+    if (loan.member_id) loan.member = await Member.findByPk(loan.member_id);
+    if (loan.loan_type_id) loan.loan_type = await LoanType.findByPk(loan.loan_type_id);
+    loan.repayments = await LoanRepayment.findAll({ 
+      where: { loan_id: loan.id },
+      order: [['repayment_number', 'ASC']]
+    });
 
     res.json({
       success: true,
@@ -107,7 +111,7 @@ router.post('/', async (req, res, next) => {
       const dueDate = new Date(startDate);
       dueDate.setMonth(dueDate.getMonth() + i);
 
-      repayments.push({
+      const createdRepayment = await LoanRepayment.create({
         loan_id: loan.id,
         repayment_number: i,
         principal_amount: principalPerMonth.toFixed(2),
@@ -116,21 +120,17 @@ router.post('/', async (req, res, next) => {
         due_date: dueDate,
         status: 'PENDING'
       });
+      repayments.push(createdRepayment);
     }
 
-    await LoanRepayment.bulkCreate(repayments);
-
-    const saved = await Loan.findByPk(loan.id, {
-      include: [
-        { model: Member, as: 'member' },
-        { model: LoanType, as: 'loan_type' },
-        { model: LoanRepayment, as: 'repayments' }
-      ]
-    });
+    // Assign repayments and associations for response
+    loan.repayments = repayments;
+    if (loan.member_id) loan.member = await Member.findByPk(loan.member_id);
+    if (loan.loan_type_id) loan.loan_type = await LoanType.findByPk(loan.loan_type_id);
 
     res.status(201).json({
       success: true,
-      data: saved,
+      data: loan,
       message: 'Loan application created successfully'
     });
   } catch (error) {
