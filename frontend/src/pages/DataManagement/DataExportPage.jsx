@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -46,11 +46,7 @@ function DataExportPage() {
   const [allSelected, setAllSelected] = useState(false);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-  useEffect(() => {
-    fetchData();
-  }, [exportType]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       let response;
@@ -79,7 +75,11 @@ function DataExportPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [exportType]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleSelectAll = (event) => {
     const checked = event.target.checked;

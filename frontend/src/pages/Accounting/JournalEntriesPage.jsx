@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -50,12 +50,7 @@ function JournalEntriesPage() {
     ],
   });
 
-  useEffect(() => {
-    fetchJournalEntries();
-    fetchAccounts();
-  }, []);
-
-  const fetchJournalEntries = async () => {
+  const fetchJournalEntries = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiService.getJournalEntries();
@@ -68,9 +63,9 @@ function JournalEntriesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const response = await apiService.getAccounts();
       if (response.data.success) {
@@ -79,7 +74,12 @@ function JournalEntriesPage() {
     } catch (err) {
       console.error('Error fetching accounts:', err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchJournalEntries();
+    fetchAccounts();
+  }, [fetchJournalEntries, fetchAccounts]);
 
   const handleAddLine = () => {
     setFormData({

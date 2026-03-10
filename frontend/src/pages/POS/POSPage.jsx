@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Grid,
@@ -57,12 +57,7 @@ function POSPage() {
 
   const categories = ['all', 'Sembako', 'Elektronik', 'Pakaian', 'ATK', 'Lainnya'];
 
-  useEffect(() => {
-    fetchProducts();
-    fetchMembers();
-  }, [selectedCategory]);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
       const params = {};
@@ -83,9 +78,9 @@ function POSPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCategory]);
 
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     try {
       const response = await apiService.getMembers({ limit: 100 });
       if (response.data.success) {
@@ -94,7 +89,12 @@ function POSPage() {
     } catch (err) {
       console.error('Error fetching members:', err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchProducts();
+    fetchMembers();
+  }, [fetchProducts, fetchMembers]);
 
   const filteredProducts = products.filter(product => {
     const matchSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

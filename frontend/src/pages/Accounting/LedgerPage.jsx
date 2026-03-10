@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -37,11 +37,7 @@ function LedgerPage() {
     closingBalance: 0,
   });
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
-
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const response = await apiService.getAccounts();
       if (response.data.success) {
@@ -53,15 +49,13 @@ function LedgerPage() {
     } catch (err) {
       console.error('Error fetching accounts:', err);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (selectedAccountId) {
-      fetchLedger();
-    }
-  }, [selectedAccountId, dateRange]);
+    fetchAccounts();
+  }, [fetchAccounts]);
 
-  const fetchLedger = async () => {
+  const fetchLedger = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -97,7 +91,13 @@ function LedgerPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedAccountId, dateRange]);
+
+  useEffect(() => {
+    if (selectedAccountId) {
+      fetchLedger();
+    }
+  }, [selectedAccountId, fetchLedger]);
 
   const handleDateChange = (field, value) => {
     setDateRange({ ...dateRange, [field]: value });
