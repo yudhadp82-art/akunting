@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -33,44 +33,28 @@ function MemberListPage() {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
 
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setMembers([
-        {
-          id: 1,
-          member_number: 'ANGG-2024-0001',
-          name: 'Budi Santoso',
-          id_card_number: '1234567890123456',
-          phone: '081234567890',
-          join_date: '2024-01-15',
-          status: 'ACTIVE',
-          total_shu_earned: 1250000,
-        },
-        {
-          id: 2,
-          member_number: 'ANGG-2024-0002',
-          name: 'Siti Aminah',
-          id_card_number: '1234567890123457',
-          phone: '081234567891',
-          join_date: '2024-02-01',
-          status: 'ACTIVE',
-          total_shu_earned: 875000,
-        },
-        {
-          id: 3,
-          member_number: 'ANGG-2024-0003',
-          name: 'Ahmad Yani',
-          id_card_number: '1234567890123458',
-          phone: '081234567892',
-          join_date: '2024-02-15',
-          status: 'ACTIVE',
-          total_shu_earned: 500000,
-        },
-      ]);
+  const fetchMembers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = {
+        limit: 100,
+        search: searchTerm
+      };
+      const response = await apiService.getMembers(params);
+      if (response.data.success) {
+        setMembers(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching members:', err);
+      // Fallback to empty or previous data on error
+    } finally {
       setLoading(false);
-    }, 1000);
-  }, []);
+    }
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [fetchMembers]);
 
   const handleAddMember = () => {
     setSelectedMember(null);
@@ -87,24 +71,36 @@ function MemberListPage() {
     setSelectedMember(null);
   };
 
-  const handleSubmitForm = (data) => {
-    if (selectedMember) {
-      // Update member (simulate)
-      setMembers(members.map(m => m.id === selectedMember.id ? { ...m, ...data } : m));
-      alert(`Berhasil memperbarui data anggota: ${data.name}`);
-    } else {
-      // Create member (simulate)
-      const newMember = {
-        ...data,
-        id: members.length + 1,
-        member_number: `ANGG-2024-${String(members.length + 1).padStart(4, '0')}`,
-        status: 'ACTIVE',
-        total_shu_earned: 0,
-      };
-      setMembers([...members, newMember]);
-      alert(`Berhasil mendaftarkan anggota baru: ${data.name}`);
+  const handleSubmitForm = async (data) => {
+    try {
+      if (selectedMember) {
+        // Update member
+        await apiService.updateMember(selectedMember.id, data);
+        alert(`Berhasil memperbarui data anggota: ${data.name}`);
+      } else {
+        // Create member
+        await apiService.createMember(data);
+        alert(`Berhasil mendaftarkan anggota baru: ${data.name}`);
+      }
+      setOpenDialog(false);
+      fetchMembers(); // Refresh list
+    } catch (err) {
+      console.error('Error saving member:', err);
+      alert('Gagal menyimpan data anggota. Pastikan backend terhubung.');
     }
-    setOpenDialog(false);
+  };
+
+  const handleDeleteMember = async (member) => {
+    if (window.confirm(`Apakah Anda yakin ingin menghapus anggota ${member.name}?`)) {
+      try {
+        await apiService.deleteMember(member.id);
+        alert('Anggota berhasil dihapus.');
+        fetchMembers();
+      } catch (err) {
+        console.error('Error deleting member:', err);
+        alert('Gagal menghapus anggota.');
+      }
+    }
   };
 
   const filteredMembers = members.filter(
@@ -203,7 +199,7 @@ function MemberListPage() {
                         <IconButton
                           size="small"
                           color="error"
-                          onClick={() => alert(`Hapus ${member.name}`)}
+                          onClick={() => handleDeleteMember(member)}
                         >
                           <DeleteIcon fontSize="small" />
                         </IconButton>

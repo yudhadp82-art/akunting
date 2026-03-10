@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -26,81 +26,62 @@ function LoanListPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
 
+  const fetchLoans = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = {
+        limit: 100,
+        search: searchTerm
+      };
+      const response = await apiService.getLoans(params);
+      if (response.data.success) {
+        setLoans(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching loans:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchLoans();
+  }, [fetchLoans]);
+
   const handleApplyLoan = () => {
     setOpenDialog(true);
   };
 
-  const handleSubmitLoan = (data) => {
-    const newLoan = {
-      ...data,
-      id: loans.length + 1,
-      loan_number: `PINJ-2024-${String(loans.length + 1).padStart(4, '0')}`,
-      member_name: 'Budi Santoso', // Mocked
-      principal_paid: 0,
-      interest_paid: 0,
-      status: 'PENDING',
-    };
-    setLoans([newLoan, ...loans]);
-    setOpenDialog(false);
-    alert(`Pengajuan pinjaman sebesar ${formatCurrency(data.principal_amount)} berhasil didaftarkan.`);
+  const handleSubmitLoan = async (data) => {
+    try {
+      await apiService.createLoan(data);
+      alert(`Pengajuan pinjaman sebesar ${formatCurrency(data.principal_amount)} berhasil didaftarkan.`);
+      setOpenDialog(false);
+      fetchLoans();
+    } catch (err) {
+      console.error('Error applying for loan:', err);
+      alert('Gagal mengajukan pinjaman.');
+    }
+  };
+
+  const handleApproveLoan = async (loanId) => {
+    if (window.confirm('Setujui pengajuan pinjaman ini?')) {
+      try {
+        await apiService.approveLoan(loanId);
+        alert('Pinjaman berhasil disetujui.');
+        fetchLoans();
+      } catch (err) {
+        console.error('Error approving loan:', err);
+        alert('Gagal menyetujui pinjaman.');
+      }
+    }
   };
 
   const filteredLoans = loans.filter(
     (loan) =>
-      loan.member_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (loan.member?.full_name || loan.member_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       loan.loan_number.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setLoans([
-        {
-          id: 1,
-          loan_number: 'PINJ-2024-0001',
-          member_name: 'Budi Santoso',
-          loan_type: 'Pinjaman Mikro',
-          principal_amount: 5000000,
-          interest_rate: 2,
-          period_months: 12,
-          start_date: '2024-01-15',
-          end_date: '2025-01-15',
-          principal_paid: 416666,
-          interest_paid: 100000,
-          status: 'ACTIVE',
-        },
-        {
-          id: 2,
-          loan_number: 'PINJ-2024-0002',
-          member_name: 'Siti Aminah',
-          loan_type: 'Pinjaman Menengah',
-          principal_amount: 15000000,
-          interest_rate: 1.75,
-          period_months: 24,
-          start_date: '2024-02-01',
-          end_date: '2026-02-01',
-          principal_paid: 0,
-          interest_paid: 0,
-          status: 'PENDING',
-        },
-        {
-          id: 3,
-          loan_number: 'PINJ-2023-0015',
-          member_name: 'Ahmad Yani',
-          loan_type: 'Pinjaman Konsumtif',
-          principal_amount: 5000000,
-          interest_rate: 1.5,
-          period_months: 18,
-          start_date: '2023-09-01',
-          end_date: '2025-03-01',
-          principal_paid: 5000000,
-          interest_paid: 112500,
-          status: 'COMPLETED',
-        },
-      ]);
-      setLoading(false);
-    }, 1000);
-  }, []);
 
   const remainingBalance = (loan) => {
     return parseFloat(loan.principal_amount) - parseFloat(loan.principal_paid);
@@ -175,8 +156,8 @@ function LoanListPage() {
                   filteredLoans.map((loan) => (
                     <TableRow key={loan.id} hover>
                       <TableCell>{loan.loan_number}</TableCell>
-                      <TableCell>{loan.member_name}</TableCell>
-                      <TableCell>{loan.loan_type}</TableCell>
+                      <TableCell>{loan.member?.full_name || loan.member_name}</TableCell>
+                      <TableCell>{loan.loan_type?.name || loan.loan_type}</TableCell>
                       <TableCell>{formatCurrency(loan.principal_amount)}</TableCell>
                       <TableCell>{loan.interest_rate}% / bulan</TableCell>
                       <TableCell>{loan.period_months} bulan</TableCell>
@@ -195,7 +176,7 @@ function LoanListPage() {
                             variant="contained"
                             color="success"
                             sx={{ mr: 1 }}
-                            onClick={() => alert(`Setujui ${loan.loan_number}`)}
+                            onClick={() => handleApproveLoan(loan.id)}
                           >
                             Setujui
                           </Button>

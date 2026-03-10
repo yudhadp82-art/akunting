@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Box,
@@ -36,68 +36,43 @@ function SavingsListPage() {
     }
   }, [location]);
 
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setSavings([
-        {
-          id: 1,
-          account_number: 'SIMP-SP-2024-0001-123',
-          member_name: 'Budi Santoso',
-          savings_type: 'Simpanan Pokok',
-          balance: 100000,
-          opened_date: '2024-01-15',
-          is_active: true,
-        },
-        {
-          id: 2,
-          account_number: 'SIMP-SW-2024-0001-456',
-          member_name: 'Budi Santoso',
-          savings_type: 'Simpanan Wajib',
-          balance: 300000,
-          opened_date: '2024-01-15',
-          is_active: true,
-        },
-        {
-          id: 3,
-          account_number: 'SIMP-SS-2024-0001-789',
-          member_name: 'Budi Santoso',
-          savings_type: 'Simpanan Sukarela',
-          balance: 1500000,
-          opened_date: '2024-01-20',
-          is_active: true,
-        },
-        {
-          id: 4,
-          account_number: 'SIMP-SP-2024-0002-321',
-          member_name: 'Siti Aminah',
-          savings_type: 'Simpanan Pokok',
-          balance: 100000,
-          opened_date: '2024-02-01',
-          is_active: true,
-        },
-        {
-          id: 5,
-          account_number: 'SIMP-SW-2024-0002-654',
-          member_name: 'Siti Aminah',
-          savings_type: 'Simpanan Wajib',
-          balance: 200000,
-          opened_date: '2024-02-01',
-          is_active: true,
-        },
-      ]);
+  const fetchSavings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getSavings();
+      if (response.data.success) {
+        setSavings(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching savings:', err);
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchSavings();
+  }, [fetchSavings]);
 
   const handleOpenTransaction = (mode) => {
     setDialogMode(mode);
     setOpenDialog(true);
   };
 
-  const handleSubmitTransaction = (data) => {
-    alert(`${data.mode === 'DEPOSIT' ? 'Setoran' : 'Penarikan'} sebesar ${formatCurrency(data.amount)} berhasil diproses.`);
-    setOpenDialog(false);
+  const handleSubmitTransaction = async (data) => {
+    try {
+      if (data.mode === 'DEPOSIT') {
+        await apiService.depositSavings(data.savings_id, { amount: data.amount, description: data.description });
+      } else {
+        await apiService.withdrawSavings(data.savings_id, { amount: data.amount, description: data.description });
+      }
+      alert(`${data.mode === 'DEPOSIT' ? 'Setoran' : 'Penarikan'} sebesar ${formatCurrency(data.amount)} berhasil diproses.`);
+      setOpenDialog(false);
+      fetchSavings();
+    } catch (err) {
+      console.error('Error processing transaction:', err);
+      alert('Gagal memproses transaksi.');
+    }
   };
 
   return (

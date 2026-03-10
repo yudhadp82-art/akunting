@@ -194,8 +194,6 @@ function Dashboard() {
             <Divider sx={{ mb: 2 }} />
             {[
               { time: 'Sekarang', user: 'Sistem', action: 'Data statistik diperbarui secara otomatis' },
-              { time: '10:30', user: 'Admin', action: 'Posting Jurnal Manual JV2403080001' },
-              { time: '09:15', user: 'Kasir', action: 'Setoran Simpanan Sukarela - Budi Santoso' },
             ].map((activity, index) => (
               <Box key={index} sx={{ py: 1.5, display: 'flex', alignItems: 'center' }}>
                 <Typography variant="body2" color="text.secondary" sx={{ width: 80 }}>

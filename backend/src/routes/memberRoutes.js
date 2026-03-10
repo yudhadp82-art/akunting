@@ -29,19 +29,6 @@ router.get('/', async (req, res, next) => {
       }
     });
   } catch (error) {
-    if (error.name === 'SequelizeConnectionRefusedError' || error.name === 'SequelizeConnectionError') {
-      // Return mock data for development when DB is not available
-      return res.json({
-        success: true,
-        data: [
-          { id: 1, member_number: 'ANGG-2024-0001', full_name: 'Budi Santoso', status: 'ACTIVE', phone: '08123456789' },
-          { id: 2, member_number: 'ANGG-2024-0002', full_name: 'Siti Aminah', status: 'ACTIVE', phone: '08123456788' },
-          { id: 3, member_number: 'ANGG-2024-0003', full_name: 'Iwan Setiawan', status: 'ACTIVE', phone: '08123456787' },
-        ],
-        pagination: { total: 3, page: 1, pages: 1 },
-        message: 'Using mock data (Database connection failed)'
-      });
-    }
     next(error);
   }
 });
