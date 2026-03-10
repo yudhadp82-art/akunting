@@ -25,8 +25,6 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Tabs,
-  Tab,
   Badge,
   AppBar,
   Toolbar,
@@ -49,7 +47,6 @@ function POSPage() {
   const [cart, setCart] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [memberSearch, setMemberSearch] = useState('');
   const [members, setMembers] = useState([]);
   const [selectedMember, setSelectedMember] = useState(null);
   const [openCheckout, setOpenCheckout] = useState(false);
@@ -57,7 +54,6 @@ function POSPage() {
   const [paidAmount, setPaidAmount] = useState('');
   const [openReceipt, setOpenReceipt] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState(null);
-  const [error, setError] = useState(null);
 
   const categories = ['all', 'Sembako', 'Elektronik', 'Pakaian', 'ATK', 'Lainnya'];
 
@@ -171,7 +167,6 @@ function POSPage() {
         setCart([]);
         setPaidAmount('');
         setSelectedMember(null);
-        setMemberSearch('');
         fetchProducts(); // Refresh stock
       }
     } catch (err) {
@@ -199,7 +194,6 @@ function POSPage() {
       setCart([]);
       setPaidAmount('');
       setSelectedMember(null);
-      setMemberSearch('');
       alert('Transaksi diproses (Demo Mode)');
     }
   };

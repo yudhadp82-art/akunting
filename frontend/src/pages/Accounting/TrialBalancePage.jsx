@@ -11,7 +11,6 @@ import {
   TableRow,
   Typography,
   Paper,
-  Grid,
   Divider,
 } from '@mui/material';
 import { formatCurrency } from '../../utils/formatters';

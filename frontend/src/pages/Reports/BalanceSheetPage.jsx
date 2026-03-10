@@ -7,16 +7,10 @@ import {
   Typography,
   Paper,
   Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
 } from '@mui/material';
 import { Print as PrintIcon, Download as DownloadIcon } from '@mui/icons-material';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 
 function BalanceSheetPage() {
   const [reportData, setReportData] = useState(null);
@@ -24,57 +18,57 @@ function BalanceSheetPage() {
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
+    const loadReport = async () => {
+      setLoading(true);
+      // Simulate API call
+      setTimeout(() => {
+        setReportData({
+          title: 'Laporan Posisi Keuangan',
+          subtitle: `Per Tanggal ${new Date(asOfDate).toLocaleDateString('id-ID', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })}`,
+          assets: {
+            current: [
+              { account_number: '1-1-1-01', name: 'Kas dan Bank', balance: 125000000 },
+              { account_number: '1-1-2-01', name: 'Piutang Anggota', balance: 45000000 },
+              { account_number: '1-1-3-01', name: 'Piutang Lain-lain', balance: 5000000 },
+            ],
+            fixed: [
+              { account_number: '1-2-1-01', name: 'Peralatan dan Kendaraan', balance: 15000000 },
+              {
+                account_number: '1-2-2-01',
+                name: 'Akumulasi Penyusutan',
+                balance: -3000000,
+              },
+            ],
+            total: 182000000,
+          },
+          liabilities: {
+            current: [
+              { account_number: '2-1-1-02', name: 'Simpanan Pokok', balance: 50000000 },
+              { account_number: '2-1-1-03', name: 'Simpanan Wajib', balance: 30000000 },
+              { account_number: '2-1-1-04', name: 'Simpanan Sukarela', balance: 68000000 },
+            ],
+            long_term: [],
+            total: 148000000,
+          },
+          equity: {
+            total: 34000000,
+            items: [
+              { account_number: '3-1-1-01', name: 'Simpanan Pokok', balance: 30000000 },
+              { account_number: '3-1-2-01', name: 'Dana Cadangan', balance: 2500000 },
+              { account_number: '3-1-3-01', name: 'SHU Tahun Berjalan', balance: 1500000 },
+            ],
+          },
+        });
+        setLoading(false);
+      }, 1000);
+    };
+
     loadReport();
   }, [asOfDate]);
-
-  const loadReport = async () => {
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setReportData({
-        title: 'Laporan Posisi Keuangan',
-        subtitle: `Per Tanggal ${new Date(asOfDate).toLocaleDateString('id-ID', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })}`,
-        assets: {
-          current: [
-            { account_number: '1-1-1-01', name: 'Kas dan Bank', balance: 125000000 },
-            { account_number: '1-1-2-01', name: 'Piutang Anggota', balance: 45000000 },
-            { account_number: '1-1-3-01', name: 'Piutang Lain-lain', balance: 5000000 },
-          ],
-          fixed: [
-            { account_number: '1-2-1-01', name: 'Peralatan dan Kendaraan', balance: 15000000 },
-            {
-              account_number: '1-2-2-01',
-              name: 'Akumulasi Penyusutan',
-              balance: -3000000,
-            },
-          ],
-          total: 182000000,
-        },
-        liabilities: {
-          current: [
-            { account_number: '2-1-1-02', name: 'Simpanan Pokok', balance: 50000000 },
-            { account_number: '2-1-1-03', name: 'Simpanan Wajib', balance: 30000000 },
-            { account_number: '2-1-1-04', name: 'Simpanan Sukarela', balance: 68000000 },
-          ],
-          long_term: [],
-          total: 148000000,
-        },
-        equity: {
-          total: 34000000,
-          items: [
-            { account_number: '3-1-1-01', name: 'Simpanan Pokok', balance: 30000000 },
-            { account_number: '3-1-2-01', name: 'Dana Cadangan', balance: 2500000 },
-            { account_number: '3-1-3-01', name: 'SHU Tahun Berjalan', balance: 1500000 },
-          ],
-        },
-      });
-      setLoading(false);
-    }, 1000);
-  };
 
   if (loading) {
     return <Typography>Memuat laporan...</Typography>;

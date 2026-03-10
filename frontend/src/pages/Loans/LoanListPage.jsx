@@ -17,7 +17,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import { Add as AddIcon, Search as SearchIcon } from '@mui/icons-material';
-import { formatCurrency, formatDate, getStatusLabel, getStatusColor } from '../../utils/formatters';
+import { formatCurrency, getStatusLabel, getStatusColor } from '../../utils/formatters';
 import LoanApplicationDialog from './LoanApplicationDialog';
 
 function LoanListPage() {
@@ -106,10 +106,6 @@ function LoanListPage() {
     return parseFloat(loan.principal_amount) - parseFloat(loan.principal_paid);
   };
 
-  const progress = (loan) => {
-    return (parseFloat(loan.principal_paid) / parseFloat(loan.principal_amount)) * 100;
-  };
-
   return (
     <Box>
       <Box
@@ -169,14 +165,14 @@ function LoanListPage() {
                       Memuat data...
                     </TableCell>
                   </TableRow>
-                ) : loans.length === 0 ? (
+                ) : filteredLoans.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} align="center">
                       Tidak ada pinjaman
                     </TableCell>
                   </TableRow>
                 ) : (
-                  loans.map((loan) => (
+                  filteredLoans.map((loan) => (
                     <TableRow key={loan.id} hover>
                       <TableCell>{loan.loan_number}</TableCell>
                       <TableCell>{loan.member_name}</TableCell>

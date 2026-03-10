@@ -59,7 +59,6 @@ function StatCard({ title, value, icon, color, subtitle }) {
 function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -71,7 +70,6 @@ function Dashboard() {
         }
       } catch (err) {
         console.error('Error fetching dashboard stats:', err);
-        setError('Gagal memuat data dashboard');
       } finally {
         setLoading(false);
       }

@@ -6,7 +6,6 @@ import {
   CardContent,
   Typography,
   Paper,
-  Grid,
   TextField,
 } from '@mui/material';
 import { Print as PrintIcon, Download as DownloadIcon } from '@mui/icons-material';
@@ -19,37 +18,37 @@ function IncomeStatementPage() {
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
+    const loadReport = async () => {
+      setLoading(true);
+      // Simulate API call
+      setTimeout(() => {
+        setReportData({
+          title: 'Laporan Laba Rugi dan Penghasilan Komprehensif Lain',
+          subtitle: `Periode ${new Date(startDate).toLocaleDateString('id-ID')} s.d. ${new Date(endDate).toLocaleDateString('id-ID')}`,
+          revenues: {
+            items: [
+              { account_number: '4-1-1-01', name: 'Pendapatan Jasa Pinjaman', amount: 45000000 },
+              { account_number: '4-1-2-01', name: 'Pendapatan Jasa Lain-lain', amount: 5000000 },
+              { account_number: '4-1-3-01', name: 'Pendapatan Usaha Lain-lain', amount: 2000000 },
+            ],
+            total: 52000000,
+          },
+          expenses: {
+            items: [
+              { account_number: '5-1-1-01', name: 'Beban Operasional', amount: 25000000 },
+              { account_number: '5-1-2-01', name: 'Beban Penyusutan', amount: 3000000 },
+              { account_number: '5-1-3-01', name: 'Beban Lain-lain', amount: 2000000 },
+            ],
+            total: 30000000,
+          },
+          netIncome: 22000000,
+        });
+        setLoading(false);
+      }, 1000);
+    };
+
     loadReport();
   }, [startDate, endDate]);
-
-  const loadReport = async () => {
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setReportData({
-        title: 'Laporan Laba Rugi dan Penghasilan Komprehensif Lain',
-        subtitle: `Periode ${new Date(startDate).toLocaleDateString('id-ID')} s.d. ${new Date(endDate).toLocaleDateString('id-ID')}`,
-        revenues: {
-          items: [
-            { account_number: '4-1-1-01', name: 'Pendapatan Jasa Pinjaman', amount: 45000000 },
-            { account_number: '4-1-2-01', name: 'Pendapatan Jasa Lain-lain', amount: 5000000 },
-            { account_number: '4-1-3-01', name: 'Pendapatan Usaha Lain-lain', amount: 2000000 },
-          ],
-          total: 52000000,
-        },
-        expenses: {
-          items: [
-            { account_number: '5-1-1-01', name: 'Beban Operasional', amount: 25000000 },
-            { account_number: '5-1-2-01', name: 'Beban Penyusutan', amount: 3000000 },
-            { account_number: '5-1-3-01', name: 'Beban Lain-lain', amount: 2000000 },
-          ],
-          total: 30000000,
-        },
-        netIncome: 22000000,
-      });
-      setLoading(false);
-    }, 1000);
-  };
 
   if (loading) {
     return <Typography>Memuat laporan...</Typography>;

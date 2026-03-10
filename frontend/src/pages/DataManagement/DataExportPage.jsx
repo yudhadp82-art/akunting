@@ -26,7 +26,6 @@ import {
 import {
   Download as DownloadIcon,
   Refresh as RefreshIcon,
-  DateRange as DateRangeIcon,
   FilterList as FilterIcon,
   Check as SelectAllIcon,
   Print as PrintIcon,
@@ -158,25 +157,6 @@ function DataExportPage() {
     }
   };
 
-  const handlePrint = () => {
-    if (selectedItems.length === 0) {
-      alert('Pilih minimal satu data untuk dicetak!');
-      return;
-    }
-
-    window.print();
-  };
-
-  const renderTableCell = (item, field) => {
-    const value = item[field];
-    if (typeof value === 'number') {
-      return field.includes('amount') || field.includes('price') || field.includes('balance')
-        ? `Rp ${value.toLocaleString('id-ID')}`
-        : value;
-    }
-    return value || '-';
-  };
-
   const exportTypes = [
     { value: 'members', label: 'Anggota' },
     { value: 'products', label: 'Produk POS' },
@@ -209,7 +189,7 @@ function DataExportPage() {
           </FormControl>
         </Grid>
 
-        {exportType === 'balance_sheet' || exportType === 'income_statement' || exportType === 'shu' && (
+        {(exportType === 'balance_sheet' || exportType === 'income_statement' || exportType === 'shu') && (
           <>
             <Grid item xs={6} md={3}>
               <TextField

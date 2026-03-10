@@ -16,14 +16,11 @@ import {
   Grid,
   CircularProgress,
   Chip,
-  Link,
   Accordion,
   AccordionSummary,
   AccordionDetails,
 } from '@mui/material';
 import {
-  CloudUpload as UploadIcon,
-  CloudDownload as DownloadIcon,
   Refresh as RefreshIcon,
   CheckCircle as SuccessIcon,
   Error as ErrorIcon,
@@ -39,10 +36,8 @@ function ExternalDataImportPage() {
   const [tabValue, setTabValue] = useState(0);
   const [url, setUrl] = useState('');
   const [memberId, setMemberId] = useState('');
-  const [loading, setLoading] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [openResultDialog, setOpenResultDialog] = useState(false);
-  const [sources, setSources] = useState([]);
   const [testConnection, setTestConnection] = useState(null);
   const [testingConnection, setTestingConnection] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -82,19 +77,9 @@ function ExternalDataImportPage() {
   ];
 
   useEffect(() => {
-    fetchSourcesStatus();
+    // Check external sources status on load
+    apiService.getExternalSourcesStatus().catch(err => console.error('Error fetching sources:', err));
   }, []);
-
-  const fetchSourcesStatus = async () => {
-    try {
-      const response = await apiService.getExternalSourcesStatus();
-      if (response.data.success) {
-        setSources(response.data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching sources:', error);
-    }
-  };
 
   const handleImportMembers = async () => {
     if (!url.trim()) {
@@ -416,7 +401,7 @@ Transactions: ${results.transactions.created} processed`);
                   tabValue === 2 ? handleSyncSavings : 
                   handleVercelScrape
                 }
-                disabled={loading || importing || !url || (tabValue === 2 && !memberId)}
+                disabled={importing || !url || (tabValue === 2 && !memberId)}
                 startIcon={importing ? <CircularProgress size={20} /> : <SyncIcon />}
               >
                 {importing ? 'Sedang Proses...' : (
